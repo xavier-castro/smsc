@@ -39,6 +39,9 @@ func TestViewSelectShowsSupplyChainQuote(t *testing.T) {
 	if strings.Contains(view, "LOCK") || strings.Contains(view, "==[ ]==") {
 		t.Fatalf("did not expect ASCII logo in select view:\n%s", view)
 	}
+	if !strings.Contains(view, "r to switch to remove secure configuration (revert what this package has done)") {
+		t.Fatalf("expected explicit remove-mode switch hint:\n%s", view)
+	}
 	if !strings.Contains(view, "SMSC only adds release-age flags to your global package-manager config.") {
 		t.Fatalf("expected philosophy text in select view:\n%s", view)
 	}
@@ -107,6 +110,9 @@ func TestRemoveModeToggleSelectsCleanupRowsAndSkipsAge(t *testing.T) {
 	}
 	if view := got.viewSelect(); !strings.Contains(view, "will remove") {
 		t.Fatalf("expected remove mode view to label planned cleanup:\n%s", view)
+	}
+	if view := got.viewSelect(); !strings.Contains(view, "r to switch to secure configuration") {
+		t.Fatalf("expected secure-mode switch hint in remove mode:\n%s", view)
 	}
 
 	updated, _ = got.handleKey(tea.KeyMsg{Type: tea.KeyEnter})

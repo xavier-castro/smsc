@@ -257,7 +257,7 @@ func (m model) viewSelect() string {
 	b.WriteString(titleStyle.Render("Secure My Supply Chain"))
 	b.WriteString("\n\n")
 	b.WriteString(fmt.Sprintf("Mode: %s\n", m.renderMode()))
-	b.WriteString(mutedStyle.Render("r switch mode"))
+	b.WriteString(mutedStyle.Render(m.modeSwitchHint()))
 	b.WriteString("\n\n")
 	b.WriteString(philosophyStyle.Render(philosophyText))
 	b.WriteString("\n\n")
@@ -289,6 +289,13 @@ func (m model) renderMode() string {
 		return warnStyle.Render(removeModeLabel)
 	}
 	return okStyle.Render(secureModeLabel)
+}
+
+func (m model) modeSwitchHint() string {
+	if m.removeMode {
+		return "r to switch to secure configuration"
+	}
+	return "r to switch to remove secure configuration (revert what this package has done)"
 }
 
 func statusLine(cursor, check string, status managers.Status, removeMode bool) string {
