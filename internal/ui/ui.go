@@ -54,6 +54,8 @@ var (
 	errStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 )
 
+const supplyChainQuote = "A 7-day package delay would have blocked installs in most short-lived malicious\npublish attacks from the last 8 years"
+
 func Run(ctx context.Context, env managers.Env, days int, output io.Writer) error {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -136,12 +138,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.statuses)-1 {
 				m.cursor++
 			}
-		case " ":
+		case " ", "space":
 			if len(m.statuses) == 0 {
 				break
 			}
 			status := m.statuses[m.cursor]
-			if status.Configurable && status.Supported && len(status.Changes) > 0 {
+			if canToggleStatus(status) {
 				m.selected[status.ID] = !m.selected[status.ID]
 			}
 		case "enter":
@@ -207,6 +209,8 @@ func (m *model) refreshPlan() {
 func (m model) viewSelect() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Secure My Supply Chain"))
+	b.WriteString("\n\n")
+	b.WriteString(mutedStyle.Render(supplyChainQuote))
 	b.WriteString("\n\nSelect package managers to secure.\n\n")
 	for i, status := range m.statuses {
 		cursor := " "
@@ -227,6 +231,10 @@ func (m model) viewSelect() string {
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render("space toggle  enter continue  q quit"))
 	return b.String()
+}
+
+func canToggleStatus(status managers.Status) bool {
+	return status.Installed && status.Supported && status.Configurable
 }
 
 func (m model) viewAge() string {
