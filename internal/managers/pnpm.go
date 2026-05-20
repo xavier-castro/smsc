@@ -1,0 +1,78 @@
+package managers
+
+import (
+	"context"
+	"path/filepath"
+	"strconv"
+
+	"github.com/xavier/smsc/internal/config"
+)
+
+type PNPM struct{}
+
+func (PNPM) ID() string   { return "pnpm" }
+func (PNPM) Name() string { return "pnpm" }
+
+func (PNPM) Plan(ctx context.Context, env Env, days int, allowLower bool) Status {
+	env = env.withDefaults()
+	exe, err := env.Runner.LookPath("pnpm")
+	if err != nil {
+		return missingStatus("pnpm", "pnpm")
+	}
+	version := commandVersion(ctx, env.Runner, "pnpm", "--version")
+	if version != "" && !versionAtLeast(version, 10, 16, 0) {
+		return unsupportedStatus("pnpm", "pnpm", exe, version, "pnpm minimumReleaseAge requires pnpm 10.16.0 or newer")
+	}
+	if version == "" {
+		version = "unknown"
+	}
+	return pnpmStatus(ctx, env, days, allowLower, "pnpm", "pnpm", exe, version)
+}
+
+func pnpmStatus(ctx context.Context, env Env, days int, allowLower bool, id, name, exe, version string) Status {
+	configPath := pnpmGlobalConfigPath(ctx, env)
+	before, _, readErr := readExisting(configPath)
+	targetMinutes := days * 24 * 60
+	status := Status{
+		ID:           id,
+		Name:         name,
+		Executable:   exe,
+		Version:      version,
+		Installed:    true,
+		Supported:    true,
+		Configurable: true,
+		ConfigPath:   configPath,
+		TargetRaw:    "minimumReleaseAge=" + strconv.Itoa(targetMinutes),
+	}
+	if readErr != nil {
+		status.Error = readErr.Error()
+		status.Configurable = false
+		return finalizeStatus(status, days, allowLower)
+	}
+	if current, raw, ok := config.ReadKeyValueInt(before, []string{"minimum-release-age", "minimumReleaseAge"}); ok {
+		seconds := int64(current) * 60
+		status.currentAgeSeconds = &seconds
+		status.CurrentRaw = "minimumReleaseAge=" + raw
+	}
+	after := config.UpsertKeyValue(before, "minimum-release-age", strconv.Itoa(targetMinutes), []string{"minimumReleaseAge"}, nil)
+	status.Changes = []config.Change{{
+		ManagerID:   id,
+		ManagerName: name,
+		Path:        configPath,
+		Description: "set pnpm minimumReleaseAge",
+		Before:      before,
+		After:       after,
+	}}
+	return finalizeStatus(status, days, allowLower)
+}
+
+func pnpmGlobalConfigPath(ctx context.Context, env Env) string {
+	out, err := env.Runner.Output(ctx, "pnpm", "config", "get", "globalconfig", "--location=global")
+	if err == nil && out != "" && out != "undefined" && out != "null" {
+		return out
+	}
+	if env.GOOS == "darwin" {
+		return filepath.Join(env.HomeDir, "Library", "Preferences", "pnpm", "rc")
+	}
+	return filepath.Join(env.ConfigHome, "pnpm", "rc")
+}

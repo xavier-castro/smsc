@@ -1,0 +1,45 @@
+version: 2
+
+project_name: smsc
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: smsc
+    main: ./cmd/smsc
+    binary: smsc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/xavier/smsc/internal/app.version={{.Version}}
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: smsc
+    repository:
+      owner: xavier
+      name: homebrew-smsc
+    homepage: https://github.com/xavier/smsc
+    description: TUI for applying package-manager release-age gates
+    license: MIT
+    test: |
+      system "#{bin}/smsc", "--version"
