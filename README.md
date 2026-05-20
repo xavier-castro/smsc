@@ -51,6 +51,12 @@ Apply non-interactively:
 smsc --days 8 --managers all --yes
 ```
 
+Remove SMSC-managed release-age configuration:
+
+```sh
+smsc --remove --managers all --yes
+```
+
 Emit machine-readable dry-run output:
 
 ```sh

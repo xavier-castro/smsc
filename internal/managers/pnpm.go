@@ -29,6 +29,19 @@ func (PNPM) Plan(ctx context.Context, env Env, days int, allowLower bool) Status
 	return pnpmStatus(ctx, env, days, allowLower, "pnpm", "pnpm", exe, version)
 }
 
+func (PNPM) Remove(ctx context.Context, env Env) Status {
+	env = env.withDefaults()
+	exe, err := env.Runner.LookPath("pnpm")
+	if err != nil {
+		return missingRemoveStatus("pnpm", "pnpm")
+	}
+	version := commandVersion(ctx, env.Runner, "pnpm", "--version")
+	if version == "" {
+		version = "detected"
+	}
+	return pnpmRemoveStatus(ctx, env, "pnpm", "pnpm", exe, version)
+}
+
 func pnpmStatus(ctx context.Context, env Env, days int, allowLower bool, id, name, exe, version string) Status {
 	configPath := pnpmGlobalConfigPath(ctx, env)
 	before, _, readErr := readExisting(configPath)
@@ -64,6 +77,48 @@ func pnpmStatus(ctx context.Context, env Env, days int, allowLower bool, id, nam
 		After:       after,
 	}}
 	return finalizeStatus(status, days, allowLower)
+}
+
+func pnpmRemoveStatus(ctx context.Context, env Env, id, name, exe, version string) Status {
+	configPath := pnpmGlobalConfigPath(ctx, env)
+	before, _, readErr := readExisting(configPath)
+	status := Status{
+		ID:           id,
+		Name:         name,
+		Executable:   exe,
+		Version:      version,
+		Installed:    true,
+		Supported:    true,
+		Configurable: true,
+		ConfigPath:   configPath,
+		TargetAge:    removeTargetAge,
+		TargetRaw:    "remove minimumReleaseAge",
+	}
+	if readErr != nil {
+		status.Error = readErr.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	}
+	aliases := []string{"minimum-release-age", "minimumReleaseAge"}
+	if raw, ok := config.ReadKeyValue(before, aliases); ok {
+		status.CurrentRaw = "minimumReleaseAge=" + raw
+		if current, _, ok := config.ReadKeyValueInt(before, aliases); ok {
+			seconds := int64(current) * 60
+			status.currentAgeSeconds = &seconds
+		}
+	}
+	after := config.RemoveKeyValue(before, aliases)
+	if before != after {
+		status.Changes = []config.Change{{
+			ManagerID:   id,
+			ManagerName: name,
+			Path:        configPath,
+			Description: "remove pnpm minimumReleaseAge",
+			Before:      before,
+			After:       after,
+		}}
+	}
+	return finalizeRemoveStatus(status)
 }
 
 func pnpmGlobalConfigPath(ctx context.Context, env Env) string {

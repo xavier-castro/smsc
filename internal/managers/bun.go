@@ -66,3 +66,59 @@ func (Bun) Plan(ctx context.Context, env Env, days int, allowLower bool) Status 
 	}}
 	return finalizeStatus(status, days, allowLower)
 }
+
+func (Bun) Remove(ctx context.Context, env Env) Status {
+	env = env.withDefaults()
+	exe, err := env.Runner.LookPath("bun")
+	if err != nil {
+		return missingRemoveStatus("bun", "Bun")
+	}
+	version := commandVersion(ctx, env.Runner, "bun", "--version")
+	if version == "" {
+		version = "detected"
+	}
+	configPath := filepath.Join(env.HomeDir, ".bunfig.toml")
+	before, _, readErr := readExisting(configPath)
+	status := Status{
+		ID:           "bun",
+		Name:         "Bun",
+		Executable:   exe,
+		Version:      version,
+		Installed:    true,
+		Supported:    true,
+		Configurable: true,
+		ConfigPath:   configPath,
+		TargetAge:    removeTargetAge,
+		TargetRaw:    "remove install.minimumReleaseAge",
+	}
+	if readErr != nil {
+		status.Error = readErr.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	}
+	if seconds, raw, ok, err := config.ReadBunMinimumReleaseAge(before); err != nil {
+		status.Error = err.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	} else if ok {
+		status.currentAgeSeconds = &seconds
+		status.CurrentRaw = "install.minimumReleaseAge=" + raw
+	}
+	after, err := config.RemoveBunMinimumReleaseAge(before)
+	if err != nil {
+		status.Error = err.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	}
+	if before != after {
+		status.Changes = []config.Change{{
+			ManagerID:   status.ID,
+			ManagerName: status.Name,
+			Path:        configPath,
+			Description: "remove Bun install.minimumReleaseAge",
+			Before:      before,
+			After:       after,
+		}}
+	}
+	return finalizeRemoveStatus(status)
+}

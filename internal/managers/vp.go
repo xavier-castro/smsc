@@ -32,3 +32,21 @@ func (VP) Plan(ctx context.Context, env Env, days int, allowLower bool) Status {
 	}
 	return status
 }
+
+func (VP) Remove(ctx context.Context, env Env) Status {
+	env = env.withDefaults()
+	exe, err := env.Runner.LookPath("vp")
+	if err != nil {
+		return missingRemoveStatus("vp", "Vite+ / VP")
+	}
+	version := commandVersion(ctx, env.Runner, "vp", "--version")
+	if version == "" {
+		version = "detected"
+	}
+	status := pnpmRemoveStatus(ctx, env, "vp", "Vite+ / VP", exe, version)
+	status.Reason = strings.TrimSpace(status.Reason)
+	for i := range status.Changes {
+		status.Changes[i].Description = "remove pnpm minimumReleaseAge for VP"
+	}
+	return status
+}

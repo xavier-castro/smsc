@@ -40,6 +40,10 @@ func SetBunMinimumReleaseAge(content string, seconds int64) (string, error) {
 	return out, nil
 }
 
+func RemoveBunMinimumReleaseAge(content string) (string, error) {
+	return RemoveTOMLSectionKey(content, "install", "minimumReleaseAge")
+}
+
 func ReadTOMLTopString(content, key string) (string, bool, error) {
 	if strings.TrimSpace(content) == "" {
 		return "", false, nil
@@ -66,6 +70,64 @@ func SetTOMLTopString(content, key, value string) (string, error) {
 		return "", err
 	}
 	return out, nil
+}
+
+func RemoveTOMLTopKey(content, key string) (string, error) {
+	found, err := hasTOMLTopKey(content, key)
+	if err != nil || !found {
+		return content, err
+	}
+
+	lines, hadTrailingNewline := splitLines(content)
+	filtered := make([]string, 0, len(lines))
+	removed := false
+	inTopLevel := true
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			inTopLevel = false
+		}
+		lineKey, _, ok := parseKeyValueLine(line)
+		if inTopLevel && ok && lineKey == key {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if !removed {
+		return content, nil
+	}
+	return validateTOML(joinRemovedLines(filtered, hadTrailingNewline))
+}
+
+func RemoveTOMLSectionKey(content, section, key string) (string, error) {
+	found, err := hasTOMLSectionKey(content, section, key)
+	if err != nil || !found {
+		return content, err
+	}
+
+	lines, hadTrailingNewline := splitLines(content)
+	filtered := make([]string, 0, len(lines))
+	removed := false
+	inSection := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			inSection = trimmed == "["+section+"]"
+			filtered = append(filtered, line)
+			continue
+		}
+		lineKey, _, ok := parseKeyValueLine(line)
+		if inSection && ok && lineKey == key {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if !removed {
+		return content, nil
+	}
+	return validateTOML(joinRemovedLines(filtered, hadTrailingNewline))
 }
 
 func upsertTOMLTopKey(content, key, value string) string {
@@ -157,4 +219,43 @@ func numericToInt64(raw any) (int64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func hasTOMLTopKey(content, key string) (bool, error) {
+	if strings.TrimSpace(content) == "" {
+		return false, nil
+	}
+	var data map[string]any
+	if err := toml.Unmarshal([]byte(content), &data); err != nil {
+		return false, err
+	}
+	_, ok := data[key]
+	return ok, nil
+}
+
+func hasTOMLSectionKey(content, section, key string) (bool, error) {
+	if strings.TrimSpace(content) == "" {
+		return false, nil
+	}
+	var data map[string]any
+	if err := toml.Unmarshal([]byte(content), &data); err != nil {
+		return false, err
+	}
+	sectionData, ok := data[section].(map[string]any)
+	if !ok {
+		return false, nil
+	}
+	_, ok = sectionData[key]
+	return ok, nil
+}
+
+func validateTOML(content string) (string, error) {
+	if strings.TrimSpace(content) == "" {
+		return content, nil
+	}
+	var data map[string]any
+	if err := toml.Unmarshal([]byte(content), &data); err != nil {
+		return "", err
+	}
+	return content, nil
 }

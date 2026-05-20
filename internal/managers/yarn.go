@@ -67,3 +67,61 @@ func (Yarn) Plan(ctx context.Context, env Env, days int, allowLower bool) Status
 	}}
 	return finalizeStatus(status, days, allowLower)
 }
+
+func (Yarn) Remove(ctx context.Context, env Env) Status {
+	env = env.withDefaults()
+	exe, err := env.Runner.LookPath("yarn")
+	if err != nil {
+		return missingRemoveStatus("yarn", "Yarn")
+	}
+	version := commandVersion(ctx, env.Runner, "yarn", "--version")
+	if version == "" {
+		version = "detected"
+	}
+	configPath := filepath.Join(env.HomeDir, ".yarnrc.yml")
+	before, _, readErr := readExisting(configPath)
+	status := Status{
+		ID:           "yarn",
+		Name:         "Yarn",
+		Executable:   exe,
+		Version:      version,
+		Installed:    true,
+		Supported:    true,
+		Configurable: true,
+		ConfigPath:   configPath,
+		TargetAge:    removeTargetAge,
+		TargetRaw:    "remove npmMinimalAgeGate",
+	}
+	if readErr != nil {
+		status.Error = readErr.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	}
+	if raw, ok, err := config.ReadYAMLString(before, "npmMinimalAgeGate"); err != nil {
+		status.Error = err.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	} else if ok {
+		status.CurrentRaw = "npmMinimalAgeGate=" + raw
+		if seconds, ok := config.ParseAgeDuration(raw); ok {
+			status.currentAgeSeconds = &seconds
+		}
+	}
+	after, err := config.RemoveYAMLTopKey(before, "npmMinimalAgeGate")
+	if err != nil {
+		status.Error = err.Error()
+		status.Configurable = false
+		return finalizeRemoveStatus(status)
+	}
+	if before != after {
+		status.Changes = []config.Change{{
+			ManagerID:   status.ID,
+			ManagerName: status.Name,
+			Path:        configPath,
+			Description: "remove Yarn npmMinimalAgeGate",
+			Before:      before,
+			After:       after,
+		}}
+	}
+	return finalizeRemoveStatus(status)
+}

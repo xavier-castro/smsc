@@ -60,6 +60,53 @@ func SetYAMLString(content, key, value string) (string, error) {
 	return encodeYAML(&doc)
 }
 
+func RemoveYAMLTopKey(content, key string) (string, error) {
+	if strings.TrimSpace(content) == "" {
+		return content, nil
+	}
+	if _, ok, err := ReadYAMLString(content, key); err != nil || !ok {
+		return content, err
+	}
+
+	lines, hadTrailingNewline := splitLines(content)
+	filtered := make([]string, 0, len(lines))
+	removed := false
+	for _, line := range lines {
+		if isTopLevelYAMLKey(line, key) {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if removed {
+		return joinRemovedLines(filtered, hadTrailingNewline), nil
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(content), &doc); err != nil {
+		return "", err
+	}
+	mapping := yamlMappingRoot(&doc)
+	if mapping == nil {
+		return content, nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+			return encodeYAML(&doc)
+		}
+	}
+	return content, nil
+}
+
+func isTopLevelYAMLKey(line, key string) bool {
+	if strings.TrimSpace(line) == "" || strings.TrimLeft(line, " \t") != line {
+		return false
+	}
+	lineKey, _, ok := parseKeyValueLine(line)
+	return ok && lineKey == key
+}
+
 func yamlMappingRoot(doc *yaml.Node) *yaml.Node {
 	if doc == nil {
 		return nil

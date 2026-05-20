@@ -37,6 +37,31 @@ func UpsertKeyValue(content, key, value string, aliases, removeAliases []string)
 	return joinLines(lines, hadTrailingNewline)
 }
 
+func RemoveKeyValue(content string, aliases []string) string {
+	if len(aliases) == 0 {
+		return content
+	}
+	lines, hadTrailingNewline := splitLines(content)
+	if len(lines) == 0 {
+		return content
+	}
+
+	filtered := make([]string, 0, len(lines))
+	removed := false
+	for _, line := range lines {
+		lineKey, _, ok := parseKeyValueLine(line)
+		if ok && stringIn(lineKey, aliases) {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if !removed {
+		return content
+	}
+	return joinRemovedLines(filtered, hadTrailingNewline)
+}
+
 func ReadKeyValue(content string, aliases []string) (string, bool) {
 	for _, line := range strings.Split(content, "\n") {
 		key, value, ok := parseKeyValueLine(line)
@@ -84,6 +109,13 @@ func joinLines(lines []string, trailingNewline bool) string {
 		out += "\n"
 	}
 	return out
+}
+
+func joinRemovedLines(lines []string, trailingNewline bool) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return joinLines(lines, trailingNewline)
 }
 
 func parseKeyValueLine(line string) (string, string, bool) {

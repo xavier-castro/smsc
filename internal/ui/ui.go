@@ -42,12 +42,12 @@ type model struct {
 	cursor     int
 	days       int
 	allowLower bool
+	removeMode bool
 	applied    []config.AppliedChange
 	err        error
 }
 
 var (
-	logoStyle           = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 	titleStyle          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	philosophyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	mutedStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
@@ -58,16 +58,12 @@ var (
 )
 
 const (
-	asciiLogo = `    .==[ ]==[ ]==[ ]==.
-   /  [ ]   _____   [ ] \
-  |  [ ]   |LOCK |   [ ] |
-   \  [ ]  |_____|  [ ] /
-    '==[ ]==[ ]==[ ]=='`
-
 	philosophyText         = "SMSC only adds release-age flags to your global package-manager config.\nIt is not a fix-all; it is one more prevention measure against current supply chain attacks."
 	supplyChainQuote       = "A 7-day package delay would have blocked installs in most short-lived malicious\npublish attacks from the last 8 years"
 	missingManagerLabel    = "package manager not installed"
 	secureConfigAddedLabel = "secure configuration added"
+	secureModeLabel        = "Secure configuration"
+	removeModeLabel        = "Remove release-age configuration"
 )
 
 func Run(ctx context.Context, env managers.Env, days int, output io.Writer) error {
@@ -125,6 +121,9 @@ func (m model) View() string {
 	case stageReview:
 		return m.viewReview()
 	case stageApply:
+		if m.removeMode {
+			return titleStyle.Render("Removing policy") + "\n\n" + m.spinner.View() + " removing selected global config entries..."
+		}
 		return titleStyle.Render("Applying policy") + "\n\n" + m.spinner.View() + " writing selected global config files..."
 	case stageDone:
 		return m.viewDone()
@@ -152,16 +151,24 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.statuses)-1 {
 				m.cursor++
 			}
+		case "r":
+			m.removeMode = !m.removeMode
+			m.refreshPlan(false)
 		case " ", "space":
 			if len(m.statuses) == 0 {
 				break
 			}
 			status := m.statuses[m.cursor]
-			if canToggleStatus(status) {
+			if canToggleStatus(status, m.removeMode) {
 				m.selected[status.ID] = !m.selected[status.ID]
 			}
 		case "enter":
-			m.stage = stageAge
+			if m.removeMode {
+				m.refreshPlan(true)
+				m.stage = stageReview
+			} else {
+				m.stage = stageAge
+			}
 		}
 	case stageAge:
 		switch msg.String() {
@@ -172,7 +179,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "right", "+", "l":
 			m.days++
 		case "enter":
-			m.refreshPlan()
+			m.refreshPlan(true)
 			m.stage = stageReview
 		case "b":
 			m.stage = stageSelect
@@ -183,7 +190,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.stage = stageApply
 			return m, tea.Batch(m.spinner.Tick, m.applyCmd())
 		case "b":
-			m.stage = stageAge
+			if m.removeMode {
+				m.stage = stageSelect
+			} else {
+				m.stage = stageAge
+			}
 		}
 	case stageDone:
 		switch msg.String() {
@@ -197,7 +208,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) scanCmd() tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(250 * time.Millisecond)
-		return scanDoneMsg(managers.Scan(m.ctx, m.env, m.days, m.allowLower))
+		return scanDoneMsg(m.scanStatuses())
 	}
 }
 
@@ -209,9 +220,23 @@ func (m model) applyCmd() tea.Cmd {
 	}
 }
 
-func (m *model) refreshPlan() {
+func (m model) scanStatuses() []managers.Status {
+	if m.removeMode {
+		return managers.ScanRemove(m.ctx, m.env)
+	}
+	return managers.Scan(m.ctx, m.env, m.days, m.allowLower)
+}
+
+func (m *model) refreshPlan(preserveSelection bool) {
 	old := m.selected
-	m.statuses = managers.Scan(m.ctx, m.env, m.days, m.allowLower)
+	if old == nil {
+		old = map[string]bool{}
+	}
+	m.statuses = m.scanStatuses()
+	if !preserveSelection {
+		m.resetSelection()
+		return
+	}
 	for _, status := range m.statuses {
 		if _, ok := old[status.ID]; !ok {
 			old[status.ID] = status.Selected
@@ -220,16 +245,29 @@ func (m *model) refreshPlan() {
 	m.selected = old
 }
 
+func (m *model) resetSelection() {
+	m.selected = map[string]bool{}
+	for _, status := range m.statuses {
+		m.selected[status.ID] = status.Selected
+	}
+}
+
 func (m model) viewSelect() string {
 	var b strings.Builder
-	b.WriteString(logoStyle.Render(asciiLogo))
-	b.WriteString("\n")
 	b.WriteString(titleStyle.Render("Secure My Supply Chain"))
+	b.WriteString("\n\n")
+	b.WriteString(fmt.Sprintf("Mode: %s\n", m.renderMode()))
+	b.WriteString(mutedStyle.Render("r switch mode"))
 	b.WriteString("\n\n")
 	b.WriteString(philosophyStyle.Render(philosophyText))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render(supplyChainQuote))
-	b.WriteString("\n\nSelect package managers to secure.\n\n")
+	b.WriteString("\n\n")
+	if m.removeMode {
+		b.WriteString("Select package managers to clean up.\n\n")
+	} else {
+		b.WriteString("Select package managers to secure.\n\n")
+	}
 	for i, status := range m.statuses {
 		cursor := " "
 		if i == m.cursor {
@@ -239,14 +277,21 @@ func (m model) viewSelect() string {
 		if m.selected[status.ID] {
 			check = "x"
 		}
-		b.WriteString(statusLine(cursor, check, status))
+		b.WriteString(statusLine(cursor, check, status, m.removeMode))
 	}
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("space toggle  enter continue  q quit"))
+	b.WriteString(mutedStyle.Render("r mode  space toggle  enter continue  q quit"))
 	return b.String()
 }
 
-func statusLine(cursor, check string, status managers.Status) string {
+func (m model) renderMode() string {
+	if m.removeMode {
+		return warnStyle.Render(removeModeLabel)
+	}
+	return okStyle.Render(secureModeLabel)
+}
+
+func statusLine(cursor, check string, status managers.Status, removeMode bool) string {
 	current := status.CurrentAge
 	if current == "" {
 		current = "not configured"
@@ -255,10 +300,13 @@ func statusLine(cursor, check string, status managers.Status) string {
 		line := fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s", cursor, check, status.Name, current, status.TargetAge, missingManagerLabel)
 		return missingManagerStyle.Render(line) + "\n"
 	}
-	return fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s\n", cursor, check, status.Name, current, status.TargetAge, statusLineState(status))
+	return fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s\n", cursor, check, status.Name, current, status.TargetAge, statusLineState(status, removeMode))
 }
 
-func canToggleStatus(status managers.Status) bool {
+func canToggleStatus(status managers.Status, removeMode bool) bool {
+	if removeMode {
+		return status.Installed && status.Configurable
+	}
 	return status.Installed && status.Supported && status.Configurable
 }
 
@@ -272,17 +320,29 @@ func (m model) viewAge() string {
 func (m model) viewReview() string {
 	changes := config.MergeChanges(managers.SelectChanges(m.statuses, m.selected))
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Review changes"))
+	if m.removeMode {
+		b.WriteString(titleStyle.Render("Review removals"))
+	} else {
+		b.WriteString(titleStyle.Render("Review changes"))
+	}
 	b.WriteString("\n\n")
 	if len(changes) == 0 {
-		b.WriteString("No file changes selected.\n")
+		if m.removeMode {
+			b.WriteString("No release-age configuration was found.\n")
+		} else {
+			b.WriteString("No file changes selected.\n")
+		}
 	} else {
 		for _, change := range changes {
 			b.WriteString(fmt.Sprintf("- %s\n  %s\n", change.Path, mutedStyle.Render(change.Description)))
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render("enter apply  b back  q quit"))
+	if m.removeMode {
+		b.WriteString(mutedStyle.Render("enter remove  b back  q quit"))
+	} else {
+		b.WriteString(mutedStyle.Render("enter apply  b back  q quit"))
+	}
 	return b.String()
 }
 
@@ -296,10 +356,18 @@ func (m model) viewDone() string {
 		b.WriteString(mutedStyle.Render("enter close"))
 		return b.String()
 	}
-	b.WriteString(okStyle.Render("Policy applied"))
+	if m.removeMode {
+		b.WriteString(okStyle.Render("Release-age configuration removed"))
+	} else {
+		b.WriteString(okStyle.Render("Policy applied"))
+	}
 	b.WriteString("\n\n")
 	if len(m.applied) == 0 {
-		b.WriteString("No changes were needed.\n")
+		if m.removeMode {
+			b.WriteString("No release-age configuration was found.\n")
+		} else {
+			b.WriteString("No changes were needed.\n")
+		}
 	} else {
 		for _, item := range m.applied {
 			if item.Changed {
@@ -315,15 +383,21 @@ func (m model) viewDone() string {
 	return b.String()
 }
 
-func statusLineState(status managers.Status) string {
+func statusLineState(status managers.Status, removeMode bool) string {
 	if !status.Installed {
 		return mutedStyle.Render(missingManagerLabel)
 	}
-	if !status.Supported {
+	if !removeMode && !status.Supported {
 		return warnStyle.Render("unsupported")
 	}
 	if status.Error != "" {
 		return errStyle.Render(status.Error)
+	}
+	if removeMode {
+		if status.NeedsChange {
+			return warnStyle.Render("will remove")
+		}
+		return mutedStyle.Render("not configured")
 	}
 	if status.AlreadyStricter {
 		return okStyle.Render("stricter")

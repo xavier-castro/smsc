@@ -26,6 +26,15 @@ func Scan(ctx context.Context, env Env, days int, allowLower bool) []Status {
 	return statuses
 }
 
+func ScanRemove(ctx context.Context, env Env) []Status {
+	env = env.withDefaults()
+	statuses := make([]Status, 0, len(All()))
+	for _, manager := range All() {
+		statuses = append(statuses, manager.Remove(ctx, env))
+	}
+	return statuses
+}
+
 func SelectChanges(statuses []Status, selected map[string]bool) []config.Change {
 	changes := []config.Change{}
 	for _, status := range statuses {

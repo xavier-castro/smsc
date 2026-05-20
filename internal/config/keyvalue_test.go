@@ -22,6 +22,33 @@ func TestUpsertKeyValuePreservesUnrelatedLinesAndDisablesConflict(t *testing.T) 
 	}
 }
 
+func TestRemoveKeyValuePreservesUnrelatedLines(t *testing.T) {
+	input := "# keep me\nregistry=https://example.test\nmin-release-age=8\nbefore=2026-05-12T00:00:00Z\n"
+	got := RemoveKeyValue(input, []string{"min-release-age"})
+	if strings.Contains(got, "min-release-age") {
+		t.Fatalf("expected min-release-age to be removed: %q", got)
+	}
+	for _, want := range []string{"# keep me", "registry=https://example.test", "before=2026-05-12T00:00:00Z"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q to be preserved: %q", want, got)
+		}
+	}
+	if noOp := RemoveKeyValue(got, []string{"min-release-age"}); noOp != got {
+		t.Fatalf("expected no-op removal to preserve content exactly:\nwant %q\ngot  %q", got, noOp)
+	}
+}
+
+func TestRemoveKeyValueSupportsAliases(t *testing.T) {
+	input := "minimumReleaseAge=11520\nminimum-release-age=11520\nregistry=https://example.test\n"
+	got := RemoveKeyValue(input, []string{"minimum-release-age", "minimumReleaseAge"})
+	if strings.Contains(got, "minimumReleaseAge") || strings.Contains(got, "minimum-release-age") {
+		t.Fatalf("expected aliases to be removed: %q", got)
+	}
+	if !strings.Contains(got, "registry=https://example.test") {
+		t.Fatalf("expected unrelated setting to remain: %q", got)
+	}
+}
+
 func TestParseAgeDuration(t *testing.T) {
 	cases := map[string]int64{
 		"8d":       8 * DaySeconds,

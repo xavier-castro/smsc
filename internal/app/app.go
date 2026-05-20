@@ -19,14 +19,17 @@ var version = "dev"
 
 type planOutput struct {
 	Days     int               `json:"days"`
+	Remove   bool              `json:"remove"`
 	Statuses []managers.Status `json:"statuses"`
 	Changes  []config.Change   `json:"changes"`
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
 	ctx := context.Background()
-	env := managers.DefaultEnv()
+	return run(ctx, managers.DefaultEnv(), args, stdout, stderr)
+}
 
+func run(ctx context.Context, env managers.Env, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "doctor" {
 		return runDoctor(ctx, env, args[1:], stdout, stderr)
 	}
@@ -39,6 +42,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	yes := fs.Bool("yes", false, "apply without interactive confirmation")
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	allowLower := fs.Bool("allow-lower", false, "allow replacing a stricter existing policy")
+	remove := fs.Bool("remove", false, "remove SMSC-managed release-age configuration")
 	showVersion := fs.Bool("version", false, "print version")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -48,7 +52,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "smsc "+version)
 		return 0
 	}
-	if *days <= 0 {
+	if !*remove && *days <= 0 {
 		fmt.Fprintln(stderr, "days must be greater than zero")
 		return 2
 	}
@@ -62,16 +66,21 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	statuses := managers.Scan(ctx, env, *days, *allowLower)
+	var statuses []managers.Status
+	if *remove {
+		statuses = managers.ScanRemove(ctx, env)
+	} else {
+		statuses = managers.Scan(ctx, env, *days, *allowLower)
+	}
 	selected := selectedManagers(statuses, *managerList)
 	changes := config.MergeChanges(managers.SelectChanges(statuses, selected))
 
 	if *jsonOut {
-		return writeJSON(stdout, planOutput{Days: *days, Statuses: statuses, Changes: changes})
+		return writeJSON(stdout, planOutput{Days: *days, Remove: *remove, Statuses: statuses, Changes: changes})
 	}
 
 	if *dryRun {
-		printPlan(stdout, *days, statuses, selected, changes)
+		printPlan(stdout, *days, *remove, statuses, selected, changes)
 		return 0
 	}
 
@@ -85,7 +94,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	printApplied(stdout, applied)
+	printApplied(stdout, applied, *remove)
 	return 0
 }
 
@@ -127,8 +136,13 @@ func selectedManagers(statuses []managers.Status, value string) map[string]bool 
 	return selected
 }
 
-func printPlan(w io.Writer, days int, statuses []managers.Status, selected map[string]bool, changes []config.Change) {
-	fmt.Fprintf(w, "SMSC dry run: target release age %s\n\n", config.FormatDays(days))
+func printPlan(w io.Writer, days int, remove bool, statuses []managers.Status, selected map[string]bool, changes []config.Change) {
+	if remove {
+		fmt.Fprintln(w, "SMSC dry run: remove release-age configuration")
+	} else {
+		fmt.Fprintf(w, "SMSC dry run: target release age %s\n", config.FormatDays(days))
+	}
+	fmt.Fprintln(w)
 	for _, status := range statuses {
 		marker := " "
 		if selected[status.ID] {
@@ -138,34 +152,66 @@ func printPlan(w io.Writer, days int, statuses []managers.Status, selected map[s
 		if current == "" {
 			current = "not configured"
 		}
-		state := status.Reason
-		if state == "" && !status.Installed {
-			state = "package manager not installed"
-		}
-		if state == "" && status.NeedsChange {
-			state = "will update"
-		}
-		if state == "" {
-			state = "secure configuration added"
-		}
+		state := statusText(status, remove)
 		fmt.Fprintf(w, "[%s] %-12s current: %-16s target: %-8s %s\n", marker, status.Name, current, status.TargetAge, state)
 	}
 	if len(changes) == 0 {
-		fmt.Fprintln(w, "\nNo changes planned.")
+		if remove {
+			fmt.Fprintln(w, "\nNo release-age configuration was found.")
+		} else {
+			fmt.Fprintln(w, "\nNo changes planned.")
+		}
 		return
 	}
-	fmt.Fprintln(w, "\nPlanned file changes:")
+	if remove {
+		fmt.Fprintln(w, "\nPlanned removals:")
+	} else {
+		fmt.Fprintln(w, "\nPlanned file changes:")
+	}
 	for _, change := range changes {
 		fmt.Fprintf(w, "- %s: %s\n", change.Path, change.Description)
 	}
 }
 
-func printApplied(w io.Writer, applied []config.AppliedChange) {
+func statusText(status managers.Status, remove bool) string {
+	if !status.Installed {
+		return "package manager not installed"
+	}
+	if status.Error != "" {
+		return status.Error
+	}
+	if remove {
+		if status.NeedsChange {
+			return "will remove"
+		}
+		if status.Reason != "" {
+			return status.Reason
+		}
+		return "release-age configuration not found"
+	}
+	if status.Reason != "" {
+		return status.Reason
+	}
+	if status.NeedsChange {
+		return "will update"
+	}
+	return "secure configuration added"
+}
+
+func printApplied(w io.Writer, applied []config.AppliedChange, remove bool) {
 	if len(applied) == 0 {
-		fmt.Fprintln(w, "No changes applied.")
+		if remove {
+			fmt.Fprintln(w, "No release-age configuration was found.")
+		} else {
+			fmt.Fprintln(w, "No changes applied.")
+		}
 		return
 	}
-	fmt.Fprintln(w, "Applied changes:")
+	if remove {
+		fmt.Fprintln(w, "Removed release-age configuration:")
+	} else {
+		fmt.Fprintln(w, "Applied changes:")
+	}
 	for _, item := range applied {
 		if item.Changed {
 			if item.BackupPath != "" {

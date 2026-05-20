@@ -79,6 +79,7 @@ type Manager interface {
 	ID() string
 	Name() string
 	Plan(ctx context.Context, env Env, days int, allowLower bool) Status
+	Remove(ctx context.Context, env Env) Status
 }
 
 type Status struct {
@@ -111,6 +112,12 @@ func missingStatus(id, name string) Status {
 		TargetAge: config.FormatDays(DefaultDays),
 		Reason:    "package manager not installed",
 	}
+}
+
+func missingRemoveStatus(id, name string) Status {
+	status := missingStatus(id, name)
+	status.TargetAge = removeTargetAge
+	return status
 }
 
 func unsupportedStatus(id, name, exe, version, reason string) Status {
@@ -155,6 +162,21 @@ func finalizeStatus(status Status, days int, allowLower bool) Status {
 	return status
 }
 
+func finalizeRemoveStatus(status Status) Status {
+	if status.TargetAge == "" {
+		status.TargetAge = removeTargetAge
+	}
+	if !status.Installed {
+		return status
+	}
+	status.NeedsChange = status.Configurable && len(status.Changes) > 0
+	status.Selected = status.NeedsChange
+	if status.Configurable && !status.NeedsChange && status.Reason == "" {
+		status.Reason = "release-age configuration not found"
+	}
+	return status
+}
+
 func readExisting(path string) (string, bool, error) {
 	return config.ReadFile(path)
 }
@@ -178,4 +200,7 @@ func firstLine(value string) string {
 	return value
 }
 
-const DefaultDays = 8
+const (
+	DefaultDays     = 8
+	removeTargetAge = "remove"
+)
