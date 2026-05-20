@@ -109,7 +109,7 @@ func missingStatus(id, name string) Status {
 		ID:        id,
 		Name:      name,
 		TargetAge: config.FormatDays(DefaultDays),
-		Reason:    "not found on PATH",
+		Reason:    "package manager not installed",
 	}
 }
 

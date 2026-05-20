@@ -139,11 +139,14 @@ func printPlan(w io.Writer, days int, statuses []managers.Status, selected map[s
 			current = "not configured"
 		}
 		state := status.Reason
+		if state == "" && !status.Installed {
+			state = "package manager not installed"
+		}
 		if state == "" && status.NeedsChange {
 			state = "will update"
 		}
 		if state == "" {
-			state = "ok"
+			state = "secure configuration added"
 		}
 		fmt.Fprintf(w, "[%s] %-12s current: %-16s target: %-8s %s\n", marker, status.Name, current, status.TargetAge, state)
 	}

@@ -31,7 +31,7 @@ func Run(ctx context.Context, env managers.Env, out io.Writer, jsonOut bool) err
 	fmt.Fprintln(out, "SMSC doctor")
 	fmt.Fprintln(out)
 	for _, status := range statuses {
-		state := "missing"
+		state := "package manager not installed"
 		if status.Installed && status.Supported {
 			state = "supported"
 		} else if status.Installed {
@@ -41,8 +41,8 @@ func Run(ctx context.Context, env managers.Env, out io.Writer, jsonOut bool) err
 		if current == "" {
 			current = "not configured"
 		}
-		fmt.Fprintf(out, "- %-12s %-11s current: %s", status.Name, state, current)
-		if status.Reason != "" {
+		fmt.Fprintf(out, "- %-12s %-29s current: %s", status.Name, state, current)
+		if status.Reason != "" && status.Reason != state {
 			fmt.Fprintf(out, " (%s)", status.Reason)
 		}
 		fmt.Fprintln(out)

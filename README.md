@@ -2,6 +2,8 @@
 
 `smsc` is a terminal UI for applying minimum release-age policies across package managers. It helps reduce exposure to freshly published malicious packages by delaying installation of new versions.
 
+SMSC is deliberately small: it adds release-age flags to your global package-manager configuration. It is not a fix-all for software supply-chain security, but it is another prevention measure against current supply-chain attacks.
+
 V1 secures global package-manager configuration for:
 
 - npm

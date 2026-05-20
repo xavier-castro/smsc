@@ -47,14 +47,28 @@ type model struct {
 }
 
 var (
-	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	okStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	warnStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	errStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	logoStyle           = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
+	titleStyle          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	philosophyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	mutedStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	okStyle             = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	warnStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	errStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	missingManagerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Strikethrough(true).StrikethroughSpaces(true)
 )
 
-const supplyChainQuote = "A 7-day package delay would have blocked installs in most short-lived malicious\npublish attacks from the last 8 years"
+const (
+	asciiLogo = `    .==[ ]==[ ]==[ ]==.
+   /  [ ]   _____   [ ] \
+  |  [ ]   |LOCK |   [ ] |
+   \  [ ]  |_____|  [ ] /
+    '==[ ]==[ ]==[ ]=='`
+
+	philosophyText         = "SMSC only adds release-age flags to your global package-manager config.\nIt is not a fix-all; it is one more prevention measure against current supply chain attacks."
+	supplyChainQuote       = "A 7-day package delay would have blocked installs in most short-lived malicious\npublish attacks from the last 8 years"
+	missingManagerLabel    = "package manager not installed"
+	secureConfigAddedLabel = "secure configuration added"
+)
 
 func Run(ctx context.Context, env managers.Env, days int, output io.Writer) error {
 	s := spinner.New()
@@ -208,7 +222,11 @@ func (m *model) refreshPlan() {
 
 func (m model) viewSelect() string {
 	var b strings.Builder
+	b.WriteString(logoStyle.Render(asciiLogo))
+	b.WriteString("\n")
 	b.WriteString(titleStyle.Render("Secure My Supply Chain"))
+	b.WriteString("\n\n")
+	b.WriteString(philosophyStyle.Render(philosophyText))
 	b.WriteString("\n\n")
 	b.WriteString(mutedStyle.Render(supplyChainQuote))
 	b.WriteString("\n\nSelect package managers to secure.\n\n")
@@ -221,16 +239,23 @@ func (m model) viewSelect() string {
 		if m.selected[status.ID] {
 			check = "x"
 		}
-		current := status.CurrentAge
-		if current == "" {
-			current = "not configured"
-		}
-		state := statusLineState(status)
-		b.WriteString(fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s\n", cursor, check, status.Name, current, status.TargetAge, state))
+		b.WriteString(statusLine(cursor, check, status))
 	}
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render("space toggle  enter continue  q quit"))
 	return b.String()
+}
+
+func statusLine(cursor, check string, status managers.Status) string {
+	current := status.CurrentAge
+	if current == "" {
+		current = "not configured"
+	}
+	if !status.Installed {
+		line := fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s", cursor, check, status.Name, current, status.TargetAge, missingManagerLabel)
+		return missingManagerStyle.Render(line) + "\n"
+	}
+	return fmt.Sprintf("%s [%s] %-13s current: %-16s target: %-8s %s\n", cursor, check, status.Name, current, status.TargetAge, statusLineState(status))
 }
 
 func canToggleStatus(status managers.Status) bool {
@@ -292,7 +317,7 @@ func (m model) viewDone() string {
 
 func statusLineState(status managers.Status) string {
 	if !status.Installed {
-		return mutedStyle.Render("missing")
+		return mutedStyle.Render(missingManagerLabel)
 	}
 	if !status.Supported {
 		return warnStyle.Render("unsupported")
@@ -306,5 +331,5 @@ func statusLineState(status managers.Status) string {
 	if status.NeedsChange {
 		return warnStyle.Render("will update")
 	}
-	return okStyle.Render("ok")
+	return okStyle.Render(secureConfigAddedLabel)
 }
