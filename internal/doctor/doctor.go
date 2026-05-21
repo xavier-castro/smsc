@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xavier/smsc/internal/config"
-	"github.com/xavier/smsc/internal/managers"
+	"github.com/xavier-castro/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/managers"
 )
 
 type Report struct {

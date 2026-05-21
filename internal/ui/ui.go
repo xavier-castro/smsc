@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/xavier/smsc/internal/config"
-	"github.com/xavier/smsc/internal/managers"
+	"github.com/xavier-castro/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/managers"
 )
 
 type stage int

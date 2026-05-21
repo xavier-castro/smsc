@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/xavier/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/config"
 )
 
 type UV struct{}

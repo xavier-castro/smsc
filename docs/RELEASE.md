@@ -46,7 +46,7 @@ smsc doctor
 ## Homebrew smoke test
 
 ```sh
-brew tap xavier/smsc
+brew tap xavier-castro/smsc
 brew install smsc
 smsc --version
 brew uninstall smsc

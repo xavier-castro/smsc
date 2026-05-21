@@ -3,7 +3,7 @@ package managers
 import (
 	"context"
 
-	"github.com/xavier/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/config"
 )
 
 func All() []Manager {

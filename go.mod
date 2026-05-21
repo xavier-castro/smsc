@@ -1,4 +1,4 @@
-module github.com/xavier/smsc
+module github.com/xavier-castro/smsc
 
 go 1.21.0
 

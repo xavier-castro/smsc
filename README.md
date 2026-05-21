@@ -1,8 +1,8 @@
 # SMSC: Secure My Supply Chain
 
-[![CI](https://github.com/xavier/smsc/actions/workflows/ci.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/ci.yml)
-[![Security](https://github.com/xavier/smsc/actions/workflows/security.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/security.yml)
-[![Release](https://github.com/xavier/smsc/actions/workflows/release.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/release.yml)
+[![CI](https://github.com/xavier-castro/smsc/actions/workflows/ci.yml/badge.svg)](https://github.com/xavier-castro/smsc/actions/workflows/ci.yml)
+[![Security](https://github.com/xavier-castro/smsc/actions/workflows/security.yml/badge.svg)](https://github.com/xavier-castro/smsc/actions/workflows/security.yml)
+[![Release](https://github.com/xavier-castro/smsc/actions/workflows/release.yml/badge.svg)](https://github.com/xavier-castro/smsc/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ![SMSC terminal UI screenshot](docs/smsc-tui.png)
@@ -22,7 +22,7 @@ The default recommendation is **8 days**.
 ### Homebrew release path
 
 ```sh
-brew tap xavier/smsc
+brew tap xavier-castro/smsc
 brew install smsc
 smsc --version
 ```
@@ -30,14 +30,14 @@ smsc --version
 ### Go install
 
 ```sh
-go install github.com/xavier/smsc/cmd/smsc@latest
+go install github.com/xavier-castro/smsc/cmd/smsc@latest
 smsc --version
 ```
 
 ### Build locally from source
 
 ```sh
-git clone https://github.com/xavier/smsc.git
+git clone https://github.com/xavier-castro/smsc.git
 cd smsc
 go test ./...
 go build ./cmd/smsc

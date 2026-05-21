@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xavier/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/config"
 )
 
 func TestFixtureExistingPoliciesAndAliases(t *testing.T) {

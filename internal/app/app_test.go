@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xavier/smsc/internal/managers"
+	"github.com/xavier-castro/smsc/internal/managers"
 )
 
 type appFakeRunner struct {

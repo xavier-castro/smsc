@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xavier/smsc/internal/config"
-	"github.com/xavier/smsc/internal/doctor"
-	"github.com/xavier/smsc/internal/managers"
-	"github.com/xavier/smsc/internal/ui"
+	"github.com/xavier-castro/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/doctor"
+	"github.com/xavier-castro/smsc/internal/managers"
+	"github.com/xavier-castro/smsc/internal/ui"
 )
 
 var version = "dev"

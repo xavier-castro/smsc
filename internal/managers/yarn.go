@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xavier/smsc/internal/config"
+	"github.com/xavier-castro/smsc/internal/config"
 )
 
 type Yarn struct{}

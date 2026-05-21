@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xavier/smsc/internal/managers"
+	"github.com/xavier-castro/smsc/internal/managers"
 )
 
 type fakeRunner struct {
