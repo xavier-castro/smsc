@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/xavier/smsc/internal/config"
 )
@@ -43,7 +44,7 @@ func (Yarn) Plan(ctx context.Context, env Env, days int, allowLower bool) Status
 	}
 	if raw, ok, err := config.ReadYAMLString(before, "npmMinimalAgeGate"); err == nil && ok {
 		status.CurrentRaw = "npmMinimalAgeGate=" + raw
-		if seconds, ok := config.ParseAgeDuration(raw); ok {
+		if seconds, ok := parseYarnMinimalAge(raw); ok {
 			status.currentAgeSeconds = &seconds
 		}
 	} else if err != nil {
@@ -103,7 +104,7 @@ func (Yarn) Remove(ctx context.Context, env Env) Status {
 		return finalizeRemoveStatus(status)
 	} else if ok {
 		status.CurrentRaw = "npmMinimalAgeGate=" + raw
-		if seconds, ok := config.ParseAgeDuration(raw); ok {
+		if seconds, ok := parseYarnMinimalAge(raw); ok {
 			status.currentAgeSeconds = &seconds
 		}
 	}
@@ -124,4 +125,15 @@ func (Yarn) Remove(ctx context.Context, env Env) Status {
 		}}
 	}
 	return finalizeRemoveStatus(status)
+}
+
+func parseYarnMinimalAge(raw string) (int64, bool) {
+	if seconds, ok := config.ParseAgeDuration(raw); ok {
+		return seconds, true
+	}
+	minutes, err := strconv.ParseInt(strings.Trim(raw, `"' `), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return minutes * 60, true
 }

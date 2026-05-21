@@ -1,39 +1,52 @@
 # SMSC: Secure My Supply Chain
 
+[![CI](https://github.com/xavier/smsc/actions/workflows/ci.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/ci.yml)
+[![Security](https://github.com/xavier/smsc/actions/workflows/security.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/security.yml)
+[![Release](https://github.com/xavier/smsc/actions/workflows/release.yml/badge.svg)](https://github.com/xavier/smsc/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ![SMSC terminal UI screenshot](docs/smsc-tui.png)
 
-`smsc` is a terminal UI for applying minimum release-age policies across package managers. It helps reduce exposure to freshly published malicious packages by delaying installation of new versions.
+`smsc` is a small terminal UI and CLI for individual developers who want global package-manager release-age policies. It delays installation of very new package versions by writing the minimum release-age settings supported by your installed package managers.
 
-SMSC is deliberately small: it adds release-age flags to your global package-manager configuration. It is not a fix-all for software supply-chain security, but it is another prevention measure against current supply-chain attacks.
+SMSC is deliberately scoped:
 
-V1 secures global package-manager configuration for:
+- **For individual developer machines.** It is not a team-policy server or CI enforcement system.
+- **Global config only.** It writes user/global package-manager config files and never changes project-local config.
+- **One supply-chain layer.** Release-age gates can reduce exposure to fast-moving malicious publishes, but they do not replace lockfiles, review, provenance, vulnerability scanning, or least-privilege tokens.
 
-- npm
-- pnpm
-- Vite+ / `vp` through the pnpm policy it uses
-- Yarn
-- Bun
-- uv
-
-The default recommendation is 8 days.
+The default recommendation is **8 days**.
 
 ## Install
 
-Initial distribution is intended through a custom Homebrew tap:
+### Homebrew release path
 
 ```sh
-brew tap <owner>/smsc
+brew tap xavier/smsc
 brew install smsc
+smsc --version
 ```
 
-Until a release exists, build locally:
+### Go install
 
 ```sh
+go install github.com/xavier/smsc/cmd/smsc@latest
+smsc --version
+```
+
+### Build locally from source
+
+```sh
+git clone https://github.com/xavier/smsc.git
+cd smsc
+go test ./...
 go build ./cmd/smsc
 ./smsc --dry-run
 ```
 
-## Usage
+Release archives are produced by GoReleaser for macOS and Linux on `amd64` and `arm64`. Verify downloaded archives with the published `checksums.txt` file.
+
+## Quick start
 
 Open the TUI:
 
@@ -41,16 +54,30 @@ Open the TUI:
 smsc
 ```
 
-Preview planned changes:
+Preview planned global config changes:
 
 ```sh
 smsc --dry-run
 ```
 
-Apply non-interactively:
+Apply the recommended 8-day policy non-interactively:
 
 ```sh
 smsc --days 8 --managers all --yes
+```
+
+Inspect machine state and local override warnings:
+
+```sh
+smsc doctor
+```
+
+List backups and restore the latest backup:
+
+```sh
+smsc backups
+smsc restore latest --dry-run
+smsc restore latest --yes
 ```
 
 Remove SMSC-managed release-age configuration:
@@ -59,38 +86,125 @@ Remove SMSC-managed release-age configuration:
 smsc --remove --managers all --yes
 ```
 
-Emit machine-readable dry-run output:
+Emit machine-readable output:
 
 ```sh
 smsc --json --dry-run
+smsc doctor --json
+smsc backups --json
 ```
 
-Print diagnostics:
+## Supported package managers
+
+| Manager | Required version | Global file SMSC writes | Setting | Unit written |
+| --- | ---: | --- | --- | --- |
+| npm | 11+ | `npm config get userconfig`, falling back to `~/.npmrc` | `min-release-age` | days |
+| pnpm | 10.16.0+ | `pnpm config get globalconfig --location=global`, falling back to `~/Library/Preferences/pnpm/rc` on macOS or `$XDG_CONFIG_HOME/pnpm/rc` elsewhere | `minimum-release-age` | minutes |
+| Vite+ / `vp` | detected `vp` binary | same pnpm global config, because VP delegates package installs to pnpm | `minimum-release-age` | minutes |
+| Yarn Berry | 4+ | `~/.yarnrc.yml` | `npmMinimalAgeGate` | duration string, e.g. `8d` |
+| Bun | 1.3.0+ | `~/.bunfig.toml` | `[install].minimumReleaseAge` | seconds |
+| uv | recent release with relative `exclude-newer` support | `$XDG_CONFIG_HOME/uv/uv.toml` or `~/.config/uv/uv.toml` | `exclude-newer` | duration string, e.g. `8 days` |
+
+`--managers auto` selects installed supported managers that need changes. `--managers all` includes all installed supported managers. Explicit lists are comma-separated, for example:
 
 ```sh
-smsc doctor
+smsc --managers npm,pnpm,bun --dry-run
 ```
 
-## What SMSC Writes
+Unknown manager names are rejected.
 
-SMSC only edits the specific release-age keys it owns and creates backups before applying changes:
+## What SMSC writes
+
+SMSC edits only the release-age keys it owns in global config files. It preserves unrelated settings where possible.
+
+For an 8-day policy, planned writes look like:
+
+```ini
+# npm user config
+min-release-age=8
+```
+
+```ini
+# pnpm global config
+minimum-release-age=11520
+```
+
+```yaml
+# ~/.yarnrc.yml
+npmMinimalAgeGate: 8d
+```
+
+```toml
+# ~/.bunfig.toml
+[install]
+minimumReleaseAge = 691200
+```
+
+```toml
+# ~/.config/uv/uv.toml
+exclude-newer = "8 days"
+```
+
+Notes:
+
+- If npm `before` exists in the same user config file, SMSC comments it out because npm treats it as conflicting with `min-release-age`.
+- If an existing policy is stricter than the requested age, SMSC preserves it unless you pass `--allow-lower`.
+- VP and pnpm may point to the same pnpm global config file. SMSC merges duplicate file changes before writing.
+
+## Backups and restore
+
+Before every apply or remove, SMSC creates a manifest under:
 
 ```text
-~/.config/smsc/backups/<timestamp>/
+$XDG_CONFIG_HOME/smsc/backups/<timestamp>/manifest.json
+# or ~/.config/smsc/backups/<timestamp>/manifest.json
 ```
 
-Package-local config can override global settings. `smsc doctor` warns when it sees likely local overrides.
+Existing files are copied into the same backup directory. If SMSC created a new file, the manifest records that there was no previous backup; restoring that entry removes the created file.
 
-## Security Checks
+Commands:
 
-SMSC is intentionally small and locally verifiable. It only writes release-age settings to global package-manager config files, creates backups before changes, and includes a removal mode.
+```sh
+smsc backups
+smsc backups --json
+smsc restore latest --dry-run
+smsc restore latest --yes
+smsc restore 20260520T120000Z --yes
+```
 
-This repository should also be verified with third-party security checks:
+Restore is intentionally explicit: it refuses to write unless `--yes` is present.
 
-- [Socket](https://socket.dev/) for dependency risk analysis and supply-chain alerts
-- [Go govulncheck](https://go.dev/doc/security/vuln/) for Go vulnerability analysis
-- [GitHub Dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/about-dependabot-alerts) for dependency update alerts
-- [GitHub CodeQL](https://codeql.github.com/docs/) for code scanning
-- [OpenSSF Scorecard](https://openssf.org/scorecard/) for repository security posture
+## Local override caveats
 
-These checks do not make SMSC a complete supply-chain security solution. They provide independent signals that help users verify the tool and its dependencies.
+Most package managers read project-local config before or in addition to user/global config. A repository can therefore override global release-age settings with files such as:
+
+- `.npmrc`
+- `.pnpmrc`
+- `pnpm-workspace.yaml`
+- `.yarnrc.yml`
+- `bunfig.toml`
+- `uv.toml`
+
+SMSC v1 does **not** modify those files. Run `smsc doctor` inside a project to report likely local override files and relevant release-age keys when SMSC can parse them.
+
+## Limitations
+
+- SMSC does not audit dependencies, prove package provenance, or detect malicious code.
+- SMSC does not edit lockfiles or project-local config.
+- SMSC only supports managers that already provide release-age or exclude-newer behavior.
+- Unsupported package-manager versions are reported and left unchanged.
+- Config parsers preserve common files, but comments/formatting in YAML and TOML may be normalized by the underlying parser when a key is changed.
+
+## Security and repository checks
+
+This repository is intended to be locally verifiable and releaseable:
+
+- MIT license in `LICENSE`
+- CI with `go test`, `go vet`, formatting, and race tests
+- Go vulnerability scanning with `govulncheck`
+- GitHub CodeQL code scanning
+- OpenSSF Scorecard workflow
+- Dependabot updates for Go modules and GitHub Actions
+- GoReleaser release workflow and checksums
+
+These checks provide useful signals about SMSC itself. They do not make SMSC a complete supply-chain security solution.

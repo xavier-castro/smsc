@@ -93,6 +93,7 @@ type Status struct {
 	Selected          bool            `json:"selected"`
 	NeedsChange       bool            `json:"needsChange"`
 	AlreadyStricter   bool            `json:"alreadyStricter"`
+	Protected         bool            `json:"protected"`
 	ConfigPath        string          `json:"configPath,omitempty"`
 	CurrentRaw        string          `json:"currentRaw,omitempty"`
 	CurrentAge        string          `json:"currentAge,omitempty"`
@@ -139,6 +140,7 @@ func finalizeStatus(status Status, days int, allowLower bool) Status {
 	status.targetAgeSeconds = config.DaysToSeconds(days)
 	if status.currentAgeSeconds != nil {
 		status.CurrentAge = config.SecondsLabel(*status.currentAgeSeconds)
+		status.Protected = *status.currentAgeSeconds >= status.targetAgeSeconds
 		if *status.currentAgeSeconds > status.targetAgeSeconds && !allowLower {
 			status.AlreadyStricter = true
 			status.NeedsChange = false

@@ -59,6 +59,29 @@ func TestJSONDryRun(t *testing.T) {
 	}
 }
 
+func TestHelpFlagReturnsZero(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := Run([]string{"--help"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(out.String(), "global package-manager config") || stderr.Len() != 0 {
+		t.Fatalf("expected global-config scope in stdout help:\nstdout=%s\nstderr=%s", out.String(), stderr.String())
+	}
+}
+
+func TestUnknownManagerRejected(t *testing.T) {
+	env, _ := removeTestEnv(t)
+	var out, stderr bytes.Buffer
+	code := run(context.Background(), env, []string{"--managers", "npm,not-a-manager", "--dry-run"}, &out, &stderr)
+	if code != 2 {
+		t.Fatalf("code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown manager") || !strings.Contains(stderr.String(), "npm") {
+		t.Fatalf("expected manager validation error, got: %s", stderr.String())
+	}
+}
+
 func TestRemoveDryRunAndJSON(t *testing.T) {
 	env, _ := removeTestEnv(t)
 
@@ -119,6 +142,94 @@ func TestRemoveYesAppliesThroughBackupPath(t *testing.T) {
 	backup := filepath.Join(env.ConfigHome, "smsc", "backups", "20260520T120000Z")
 	if _, err := os.Stat(filepath.Join(backup, "manifest.json")); err != nil {
 		t.Fatalf("expected backup manifest: %v", err)
+	}
+}
+
+func TestApplyBackupsListAndRestoreEndToEnd(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	npmrc := filepath.Join(home, ".npmrc")
+	original := "registry=https://example.test\n"
+	if err := os.WriteFile(npmrc, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := managers.Env{
+		HomeDir:    home,
+		ConfigHome: configHome,
+		Now:        func() time.Time { return time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC) },
+		Runner:     appFakeRunner{paths: map[string]string{"npm": "/bin/npm"}, outputs: map[string]string{"npm --version": "11.12.1", "npm config get userconfig": npmrc}},
+	}
+
+	var out, stderr bytes.Buffer
+	code := run(context.Background(), env, []string{"--managers", "npm", "--yes"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("apply code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	got, err := os.ReadFile(npmrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "min-release-age=8") {
+		t.Fatalf("expected npm policy after apply:\n%s", string(got))
+	}
+
+	out.Reset()
+	stderr.Reset()
+	code = run(context.Background(), env, []string{"backups"}, &out, &stderr)
+	if code != 0 || !strings.Contains(out.String(), "20260520T120000Z") {
+		t.Fatalf("backups code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+
+	out.Reset()
+	stderr.Reset()
+	code = run(context.Background(), env, []string{"restore", "latest", "--dry-run"}, &out, &stderr)
+	if code != 0 || !strings.Contains(out.String(), "Files that would be restored") {
+		t.Fatalf("restore dry-run code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+
+	out.Reset()
+	stderr.Reset()
+	code = run(context.Background(), env, []string{"restore", "latest", "--yes"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("restore code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	got, err = os.ReadFile(npmrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("expected original npmrc after restore, got:\n%s", string(got))
+	}
+}
+
+func TestRestoreRemovesFileCreatedByApply(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	npmrc := filepath.Join(home, ".npmrc")
+	env := managers.Env{
+		HomeDir:    home,
+		ConfigHome: configHome,
+		Now:        func() time.Time { return time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC) },
+		Runner:     appFakeRunner{paths: map[string]string{"npm": "/bin/npm"}, outputs: map[string]string{"npm --version": "11.12.1", "npm config get userconfig": npmrc}},
+	}
+
+	var out, stderr bytes.Buffer
+	code := run(context.Background(), env, []string{"--managers", "npm", "--yes"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("apply code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	if _, err := os.Stat(npmrc); err != nil {
+		t.Fatalf("expected npmrc to be created: %v", err)
+	}
+
+	out.Reset()
+	stderr.Reset()
+	code = run(context.Background(), env, []string{"restore", "latest", "--yes"}, &out, &stderr)
+	if code != 0 {
+		t.Fatalf("restore code=%d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	if _, err := os.Stat(npmrc); !os.IsNotExist(err) {
+		t.Fatalf("expected restore to remove created npmrc, stat err=%v", err)
 	}
 }
 

@@ -41,7 +41,11 @@ func ApplyChanges(changes []Change, configHome string, now time.Time) ([]Applied
 		return nil, nil
 	}
 
-	backupDir := filepath.Join(configHome, "smsc", "backups", now.UTC().Format("20060102T150405Z"))
+	backupDir := filepath.Join(BackupRoot(configHome), now.UTC().Format("20060102T150405Z"))
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return nil, err
+	}
+
 	applied := make([]AppliedChange, 0, len(merged))
 	for _, change := range merged {
 		if change.Before == change.After {
@@ -54,14 +58,13 @@ func ApplyChanges(changes []Change, configHome string, now time.Time) ([]Applied
 		}
 
 		backupPath := ""
-		if change.Before != "" {
-			if err := os.MkdirAll(backupDir, 0o755); err != nil {
-				return applied, err
-			}
+		if _, err := os.Stat(change.Path); err == nil {
 			backupPath = filepath.Join(backupDir, sanitizePath(change.Path))
 			if err := os.WriteFile(backupPath, []byte(change.Before), 0o600); err != nil {
 				return applied, err
 			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return applied, err
 		}
 
 		if err := os.WriteFile(change.Path, []byte(change.After), 0o644); err != nil {
@@ -71,7 +74,9 @@ func ApplyChanges(changes []Change, configHome string, now time.Time) ([]Applied
 	}
 
 	if len(applied) > 0 {
-		_ = writeManifest(backupDir, applied)
+		if err := writeManifest(backupDir, applied); err != nil {
+			return applied, err
+		}
 	}
 	return applied, nil
 }
@@ -120,6 +125,9 @@ func sanitizePath(path string) string {
 func writeManifest(backupDir string, applied []AppliedChange) error {
 	if backupDir == "" {
 		return nil
+	}
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(applied, "", "  ")
 	if err != nil {
