@@ -105,7 +105,7 @@ type Status struct {
 	Changes           []config.Change `json:"changes,omitempty"`
 	currentAgeSeconds *int64
 	targetAgeSeconds  int64
-	savePrefixChange bool
+	savePrefixChange  bool
 }
 
 func missingStatus(id, name string) Status {

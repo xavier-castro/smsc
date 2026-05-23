@@ -229,7 +229,7 @@ func TestRemoveHonorsSavePrefixToggle(t *testing.T) {
 			},
 			outputs: map[string]string{
 				"npm --version":             "11.12.1",
-				"npm config get userconfig":  npmrc,
+				"npm config get userconfig": npmrc,
 				"pnpm --version":            "10.33.0",
 				"pnpm config get globalconfig --location=global": pnpmRC,
 			},
