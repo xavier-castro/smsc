@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/xavier-castro/smsc/internal/config"
 )
@@ -49,11 +50,22 @@ func (NPM) Plan(ctx context.Context, env Env, days int, allowLower bool) Status 
 		status.CurrentRaw = "min-release-age=" + raw
 	}
 	after := config.UpsertKeyValue(before, "min-release-age", strconv.Itoa(days), nil, []string{"before"})
+	if env.SavePrefixTilde {
+		currentPrefix, ok := config.ReadKeyValue(after, []string{"save-prefix"})
+		if !ok || strings.Trim(currentPrefix, `"' `) != "~" {
+			after = config.UpsertKeyValue(after, "save-prefix", "~", nil, nil)
+			status.savePrefixChange = true
+		}
+	}
+	description := "set npm min-release-age"
+	if env.SavePrefixTilde {
+		description = "set npm min-release-age and save-prefix"
+	}
 	status.Changes = []config.Change{{
 		ManagerID:   status.ID,
 		ManagerName: status.Name,
 		Path:        configPath,
-		Description: "set npm min-release-age",
+		Description: description,
 		Before:      before,
 		After:       after,
 	}}
@@ -83,8 +95,16 @@ func (NPM) Remove(ctx context.Context, env Env) Status {
 		Configurable: true,
 		ConfigPath:   configPath,
 		TargetAge:    removeTargetAge,
-		TargetRaw:    "remove min-release-age",
 	}
+	aliases := []string{"min-release-age"}
+	targetRaw := "remove min-release-age"
+	description := "remove npm min-release-age"
+	if env.SavePrefixTilde {
+		aliases = append(aliases, "save-prefix")
+		targetRaw = "remove min-release-age and save-prefix"
+		description = "remove npm min-release-age and save-prefix"
+	}
+	status.TargetRaw = targetRaw
 	if readErr != nil {
 		status.Error = readErr.Error()
 		status.Configurable = false
@@ -97,13 +117,13 @@ func (NPM) Remove(ctx context.Context, env Env) Status {
 			status.currentAgeSeconds = &seconds
 		}
 	}
-	after := config.RemoveKeyValue(before, []string{"min-release-age"})
+	after := config.RemoveKeyValue(before, aliases)
 	if before != after {
 		status.Changes = []config.Change{{
 			ManagerID:   status.ID,
 			ManagerName: status.Name,
 			Path:        configPath,
-			Description: "remove npm min-release-age",
+			Description: description,
 			Before:      before,
 			After:       after,
 		}}

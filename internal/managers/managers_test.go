@@ -203,3 +203,44 @@ func TestStricterPolicyIsPreserved(t *testing.T) {
 		t.Fatalf("expected no changes for stricter policy: %#v", status.Changes)
 	}
 }
+
+func TestRemoveHonorsSavePrefixToggle(t *testing.T) {
+	home := t.TempDir()
+	npmrc := filepath.Join(home, ".npmrc")
+	pnpmRC := filepath.Join(home, "Library", "Preferences", "pnpm", "rc")
+	if err := os.WriteFile(npmrc, []byte("min-release-age=8\nsave-prefix=~\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(pnpmRC), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pnpmRC, []byte("minimum-release-age=11520\nsave-prefix=~\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := Env{
+		HomeDir:         home,
+		ConfigHome:      filepath.Join(home, ".config"),
+		GOOS:            "darwin",
+		SavePrefixTilde: true,
+		Runner: fakeRunner{
+			paths: map[string]string{
+				"npm":  "/bin/npm",
+				"pnpm": "/bin/pnpm",
+			},
+			outputs: map[string]string{
+				"npm --version":             "11.12.1",
+				"npm config get userconfig":  npmrc,
+				"pnpm --version":            "10.33.0",
+				"pnpm config get globalconfig --location=global": pnpmRC,
+			},
+		},
+	}
+	npm := NPM{}.Remove(context.Background(), env)
+	if !npm.NeedsChange || strings.Contains(npm.Changes[0].After, "save-prefix") || strings.Contains(npm.Changes[0].After, "min-release-age") {
+		t.Fatalf("expected npm remove to clear managed keys: %#v", npm.Changes)
+	}
+	pnpm := PNPM{}.Remove(context.Background(), env)
+	if !pnpm.NeedsChange || strings.Contains(pnpm.Changes[0].After, "save-prefix") || strings.Contains(pnpm.Changes[0].After, "minimumReleaseAge") {
+		t.Fatalf("expected pnpm remove to clear managed keys: %#v", pnpm.Changes)
+	}
+}

@@ -27,8 +27,12 @@ func (VP) Plan(ctx context.Context, env Env, days int, allowLower bool) Status {
 	if status.Reason == "" {
 		status.Reason = "secured through pnpm global config"
 	}
+	description := "set pnpm minimumReleaseAge for VP"
+	if env.SavePrefixTilde {
+		description = "set pnpm minimumReleaseAge and save-prefix for VP"
+	}
 	for i := range status.Changes {
-		status.Changes[i].Description = "set pnpm minimumReleaseAge for VP"
+		status.Changes[i].Description = description
 	}
 	return status
 }
@@ -45,8 +49,12 @@ func (VP) Remove(ctx context.Context, env Env) Status {
 	}
 	status := pnpmRemoveStatus(ctx, env, "vp", "Vite+ / VP", exe, version)
 	status.Reason = strings.TrimSpace(status.Reason)
+	description := "remove pnpm minimumReleaseAge for VP"
+	if env.SavePrefixTilde {
+		description = "remove pnpm minimumReleaseAge and save-prefix for VP"
+	}
 	for i := range status.Changes {
-		status.Changes[i].Description = "remove pnpm minimumReleaseAge for VP"
+		status.Changes[i].Description = description
 	}
 	return status
 }

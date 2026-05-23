@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/xavier-castro/smsc/internal/config"
 )
@@ -68,11 +69,22 @@ func pnpmStatus(ctx context.Context, env Env, days int, allowLower bool, id, nam
 		status.CurrentRaw = "minimumReleaseAge=" + raw
 	}
 	after := config.UpsertKeyValue(before, "minimum-release-age", strconv.Itoa(targetMinutes), []string{"minimumReleaseAge"}, nil)
+	if env.SavePrefixTilde {
+		currentPrefix, ok := config.ReadKeyValue(after, []string{"save-prefix"})
+		if !ok || strings.Trim(currentPrefix, `"' `) != "~" {
+			after = config.UpsertKeyValue(after, "save-prefix", "~", nil, nil)
+			status.savePrefixChange = true
+		}
+	}
+	description := "set pnpm minimumReleaseAge"
+	if env.SavePrefixTilde {
+		description = "set pnpm minimumReleaseAge and save-prefix"
+	}
 	status.Changes = []config.Change{{
 		ManagerID:   id,
 		ManagerName: name,
 		Path:        configPath,
-		Description: "set pnpm minimumReleaseAge",
+		Description: description,
 		Before:      before,
 		After:       after,
 	}}
@@ -100,6 +112,14 @@ func pnpmRemoveStatus(ctx context.Context, env Env, id, name, exe, version strin
 		return finalizeRemoveStatus(status)
 	}
 	aliases := []string{"minimum-release-age", "minimumReleaseAge"}
+	targetRaw := "remove minimumReleaseAge"
+	description := "remove pnpm minimumReleaseAge"
+	if env.SavePrefixTilde {
+		aliases = append(aliases, "save-prefix")
+		targetRaw = "remove minimumReleaseAge and save-prefix"
+		description = "remove pnpm minimumReleaseAge and save-prefix"
+	}
+	status.TargetRaw = targetRaw
 	if raw, ok := config.ReadKeyValue(before, aliases); ok {
 		status.CurrentRaw = "minimumReleaseAge=" + raw
 		if current, _, ok := config.ReadKeyValueInt(before, aliases); ok {
@@ -113,7 +133,7 @@ func pnpmRemoveStatus(ctx context.Context, env Env, id, name, exe, version strin
 			ManagerID:   id,
 			ManagerName: name,
 			Path:        configPath,
-			Description: "remove pnpm minimumReleaseAge",
+			Description: description,
 			Before:      before,
 			After:       after,
 		}}

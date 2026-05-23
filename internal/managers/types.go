@@ -30,12 +30,13 @@ func (OSRunner) Output(ctx context.Context, name string, args ...string) (string
 }
 
 type Env struct {
-	HomeDir    string
-	ConfigHome string
-	Runner     Runner
-	Now        func() time.Time
-	GOOS       string
-	Cwd        string
+	HomeDir         string
+	ConfigHome      string
+	Runner          Runner
+	Now             func() time.Time
+	GOOS            string
+	Cwd             string
+	SavePrefixTilde bool
 }
 
 func DefaultEnv() Env {
@@ -104,6 +105,7 @@ type Status struct {
 	Changes           []config.Change `json:"changes,omitempty"`
 	currentAgeSeconds *int64
 	targetAgeSeconds  int64
+	savePrefixChange bool
 }
 
 func missingStatus(id, name string) Status {
@@ -142,14 +144,21 @@ func finalizeStatus(status Status, days int, allowLower bool) Status {
 		status.CurrentAge = config.SecondsLabel(*status.currentAgeSeconds)
 		status.Protected = *status.currentAgeSeconds >= status.targetAgeSeconds
 		if *status.currentAgeSeconds > status.targetAgeSeconds && !allowLower {
-			status.AlreadyStricter = true
-			status.NeedsChange = false
-			status.Selected = false
-			status.Changes = nil
-			status.Reason = "already stricter than requested; preserving existing policy"
-			return status
+			if !status.savePrefixChange {
+				status.AlreadyStricter = true
+				status.NeedsChange = false
+				status.Selected = false
+				status.Changes = nil
+				status.Reason = "already stricter than requested; preserving existing policy"
+				return status
+			}
 		}
 		if *status.currentAgeSeconds == status.targetAgeSeconds {
+			if status.savePrefixChange {
+				status.NeedsChange = status.Configurable && len(status.Changes) > 0
+				status.Selected = status.NeedsChange
+				return status
+			}
 			status.NeedsChange = false
 			status.Selected = false
 			if status.Reason == "" {
