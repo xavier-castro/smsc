@@ -50,6 +50,48 @@ func TestFixtureExistingPoliciesAndAliases(t *testing.T) {
 	})
 }
 
+func TestSavePrefixToggleWithStrictAgePolicy(t *testing.T) {
+	home := t.TempDir()
+	npmrc := filepath.Join(home, ".npmrc")
+	pnpmRC := filepath.Join(home, ".config", "pnpm", "rc")
+	if err := os.WriteFile(npmrc, []byte("min-release-age=30\nsave-prefix=^\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(pnpmRC), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pnpmRC, []byte("minimum-release-age=43200\nsave-prefix=^\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := func() time.Time { return time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC) }
+
+	env := Env{
+		HomeDir:         home,
+		ConfigHome:      filepath.Join(home, ".config"),
+		Now:             now,
+		SavePrefixTilde: true,
+		Runner: fakeRunner{
+			paths: map[string]string{"npm": "/bin/npm", "pnpm": "/bin/pnpm"},
+			outputs: map[string]string{
+				"npm --version":             "11.12.1",
+				"npm config get userconfig": npmrc,
+				"pnpm --version":            "10.33.0",
+				"pnpm config get globalconfig --location=global": pnpmRC,
+			},
+		},
+	}
+
+	npmStatus := NPM{}.Plan(context.Background(), env, 8, false)
+	if !npmStatus.NeedsChange || !strings.Contains(npmStatus.Changes[0].After, "save-prefix=~") {
+		t.Fatalf("expected npm to switch save-prefix with strict age preserved: %#v", npmStatus)
+	}
+
+	pnpmStatus := PNPM{}.Plan(context.Background(), env, 8, false)
+	if !pnpmStatus.NeedsChange || !strings.Contains(pnpmStatus.Changes[0].After, "save-prefix=~") {
+		t.Fatalf("expected pnpm to switch save-prefix with strict age preserved: %#v", pnpmStatus)
+	}
+}
+
 func TestFixtureMalformedConfigsDisableManager(t *testing.T) {
 	cases := []struct {
 		name    string

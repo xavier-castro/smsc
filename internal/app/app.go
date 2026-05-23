@@ -71,6 +71,7 @@ func run(ctx context.Context, env managers.Env, args []string, stdout, stderr io
 	yes := fs.Bool("yes", false, "apply without interactive confirmation")
 	jsonOut := fs.Bool("json", false, "emit JSON")
 	allowLower := fs.Bool("allow-lower", false, "allow replacing a stricter existing policy")
+	saveTilde := fs.Bool("save-tilde", false, "set npm/pnpm save-prefix to ~ instead of ^ for new dependencies")
 	remove := fs.Bool("remove", false, "remove SMSC-managed release-age configuration")
 	showVersion := fs.Bool("version", false, "print version")
 	if err := fs.Parse(args); err != nil {
@@ -93,6 +94,7 @@ func run(ctx context.Context, env managers.Env, args []string, stdout, stderr io
 		fmt.Fprintln(stderr, "days must be greater than zero")
 		return 2
 	}
+	env.SavePrefixTilde = *saveTilde
 
 	noFlags := len(args) == 0
 	if noFlags {
@@ -522,6 +524,7 @@ Flags:
   --yes               apply without interactive confirmation
   --json              emit JSON
   --allow-lower       allow replacing a stricter existing policy
+  --save-tilde        set npm/pnpm save-prefix to ~ instead of ^
   --remove            remove SMSC-managed release-age configuration
   --version           print version
   -h, --help          show help
@@ -529,6 +532,7 @@ Flags:
 Examples:
   smsc --dry-run
   smsc --days 8 --managers all --yes
+  smsc --days 8 --save-tilde --managers npm,pnpm --yes
   smsc backups
   smsc restore latest --yes
 `, managers.DefaultDays)

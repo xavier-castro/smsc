@@ -64,6 +64,7 @@ Apply the recommended 8-day policy non-interactively:
 
 ```sh
 smsc --days 8 --managers all --yes
+smsc --days 8 --save-tilde --managers npm,pnpm --yes
 ```
 
 Inspect machine state and local override warnings:
@@ -113,6 +114,8 @@ smsc --managers npm,pnpm,bun --dry-run
 
 Unknown manager names are rejected.
 
+When you add `--save-tilde`, SMSC also configures package manager save-prefix behavior for npm and pnpm so dependencies default to patch-level updates (`~`), while preserving existing locked dependencies.
+
 ## What SMSC writes
 
 SMSC edits only the release-age keys it owns in global config files. It preserves unrelated settings where possible.
@@ -125,8 +128,18 @@ min-release-age=8
 ```
 
 ```ini
+# npm user config (with --save-tilde)
+save-prefix=~
+```
+
+```ini
 # pnpm global config
 minimum-release-age=11520
+```
+
+```ini
+# pnpm global config (with --save-tilde)
+save-prefix=~
 ```
 
 ```yaml
@@ -148,6 +161,8 @@ exclude-newer = "8 days"
 Notes:
 
 - If npm `before` exists in the same user config file, SMSC comments it out because npm treats it as conflicting with `min-release-age`.
+- If you enable `--save-tilde`, SMSC edits `save-prefix` in npm/pnpm config files and does not change it in other managers.
+- When `--remove` is used, pass `--save-tilde` to remove `save-prefix` values that were managed by SMSC.
 - If an existing policy is stricter than the requested age, SMSC preserves it unless you pass `--allow-lower`.
 - VP and pnpm may point to the same pnpm global config file. SMSC merges duplicate file changes before writing.
 
